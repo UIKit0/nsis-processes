@@ -69,7 +69,7 @@ BOOL IsProcessNamed(DWORD processId, char *processName)
     DWORD       modulesCount;
     BOOL        nameMatches = FALSE;
 
-    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, processId);
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
     if (!hProcess)
         return FALSE;
 
@@ -117,71 +117,67 @@ Error:
     return FALSE;
 }
 
-// Kills a process by name. Returns true if process was found, false otherwise.
-static bool KillProc(char *szProcess)
+// return TRUE if found and killed a process
+BOOL KillProcessNamed(DWORD processId, char *processName)
 {
-	char		szProcessName[ 1024 ];
-	char		szCurrentProcessName[ 1024 ];
-	DWORD		dPID[ 1024 ];
-	DWORD		dPIDSize( 1024 );
-	DWORD		dSize( 1024 );
-	HANDLE		hProcess;
-	HMODULE		phModule[ 1024 ];
+    HANDLE      hProcess = NULL;
+    char        currentProcessName[1024];
+    HMODULE     modulesArray[1024];
+    DWORD       modulesCount;
+    BOOL        killed = FALSE;
 
-	// make the name lower case
-	memset( szProcessName, 0, 1024*sizeof(char) );
-	sprintf( szProcessName, "%s", szProcess );
-	strlwr( szProcessName );
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, processId);
+    if (!hProcess)
+        return FALSE;
 
-	if( false == LoadPSAPIRoutines() )
-		return false;
+    BOOL ok = EnumProcessModules(hProcess, modulesArray, sizeof(HMODULE)*1024, &modulesCount);
+    if (!ok)
+        goto Exit;
 
-    if( FALSE == EnumProcesses( dPID, dSize, &dPIDSize ) )
-	{
-		FreePSAPIRoutines();
+    if (0 == GetModuleBaseNameA(hProcess, modulesArray[0], currentProcessName, 1024))
+        goto Exit;
 
-		return false;
-	}
+    if (0 != _stricmp(currentProcessName, processName))
+        goto Exit;
 
-	// walk trough and compare see if the process is running
-	for( int k( dPIDSize / sizeof( DWORD ) ); k >= 0; k-- )
-	{
-		memset( szCurrentProcessName, 0, 1024*sizeof(char) );
+    killed = TerminateProcess(hProcess, 0);
+    if (!killed)
+        goto Exit;
 
-		if( NULL != ( hProcess = OpenProcess( PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, dPID[ k ] ) ) )
-		{
-			if( TRUE == EnumProcessModules( hProcess, phModule, sizeof(HMODULE)*1024, &dPIDSize ) )
-				if( GetModuleBaseNameA( hProcess, phModule[ 0 ], szCurrentProcessName, 1024 ) > 0 )
-				{
-					strlwr( szCurrentProcessName );
+    UpdateWindow(FindWindow( NULL, "Shell_TrayWnd"));    
+    UpdateWindow(GetDesktopWindow());
 
-					if( NULL != strstr( szCurrentProcessName, szProcessName ) )
-					{
-						FreePSAPIRoutines();
+Exit:
+    CloseHandle(hProcess);
+    return killed;
+}
 
-						if( false == TerminateProcess( hProcess, 0 ) )
-						{
-							CloseHandle( hProcess );
+static BOOL KillProc(char *processName)
+{
+    DWORD  pidsArray[PIDS_ARRAY_SIZE_MAX];
+    DWORD  cbPidsArraySize;
+    int    killedCount = 0;
 
-							return true;
-						}
+    if (!LoadPSAPIRoutines())
+        return FALSE;
 
-						UpdateWindow( FindWindow( NULL, "Shell_TrayWnd" ) );
+    if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsArraySize))
+        goto Error;
 
-						UpdateWindow( GetDesktopWindow() );
-						CloseHandle( hProcess );
+    int processesCount = cbPidsArraySize / sizeof(DWORD);
 
-						return true;
-					}
-				}
+    for (int i = 0; i < processesCount; i++)
+    {
+        if (KillProcessNamed(pidsArray[i], processName)) 
+            killedCount++;
+    }
 
-			CloseHandle( hProcess );
-		}
-	}
-	
-	FreePSAPIRoutines();
+    FreePSAPIRoutines();
+    return killedCount > 0;
 
-	return false;
+Error:
+    FreePSAPIRoutines();
+    return FALSE;
 }
 
 static BOOL FindDev(char *deviceName)
