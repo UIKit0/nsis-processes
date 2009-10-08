@@ -4,6 +4,7 @@
 	Version="9.00"
 	Name="processes"
 	ProjectGUID="{3438467F-A719-46DC-93E5-137A8B691727}"
+	RootNamespace="processes"
 	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
@@ -60,6 +61,7 @@
 				WarningLevel="3"
 				SuppressStartupBanner="true"
 				DebugInformationFormat="4"
+				DisableSpecificWarnings="4996"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -156,6 +158,7 @@
 				ProgramDataBaseFileName="..\bin\processes/"
 				WarningLevel="4"
 				SuppressStartupBanner="true"
+				DisableSpecificWarnings="4996"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
