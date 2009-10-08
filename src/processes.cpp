@@ -2,12 +2,6 @@
 #include "processes.h"
 #include "string.h"
 
-
-
-
-
-
-//-------------------------------------------------------------------------------------------
 // global variables
 lpfEnumProcesses			EnumProcesses;
 lpfEnumProcessModules		EnumProcessModules;
@@ -19,11 +13,6 @@ HINSTANCE					g_hInstance;
 HWND						g_hwndParent;
 HINSTANCE					g_hInstLib;
 
-
-
-
-
-//-------------------------------------------------------------------------------------------
 // main DLL entry
 BOOL WINAPI		_DllMainCRTStartup( HANDLE	hInst, 
 									ULONG	ul_reason_for_call,
@@ -34,11 +23,6 @@ BOOL WINAPI		_DllMainCRTStartup( HANDLE	hInst,
     return TRUE;
 }
 
-
-
-
-
-//-------------------------------------------------------------------------------------------
 // loads the psapi routines
 bool	LoadPSAPIRoutines( void )
 {
@@ -58,18 +42,12 @@ bool	LoadPSAPIRoutines( void )
 		( NULL == GetDeviceDriverBaseName ) )
 	{
 		FreeLibrary( g_hInstLib );
-
 		return false;
 	}
 
 	return true;
 }
 
-
-
-
-
-//-------------------------------------------------------------------------------------------
 // free the psapi routines
 bool	FreePSAPIRoutines( void )
 {
@@ -84,11 +62,6 @@ bool	FreePSAPIRoutines( void )
 	return true;
 }
 
-
-
-
-
-//-------------------------------------------------------------------------------------------
 // find a process by name
 // return value:	true	- process was found
 //					false	- process not found
@@ -102,23 +75,16 @@ bool	FindProc( char *szProcess )
 	HANDLE		hProcess;
 	HMODULE		phModule[ 1024 ];
 
-  
-	//
 	// make the name lower case
-	//
 	memset( szProcessName, 0, 1024*sizeof(char) );
 	sprintf( szProcessName, "%s", szProcess );
 	strlwr( szProcessName );
 
-	//
     // load PSAPI routines
-	//
 	if( false == LoadPSAPIRoutines() )
 		return false;
 
-	//
 	// enumerate processes names
-	//
     if( FALSE == EnumProcesses( dPID, dSize, &dPIDSize ) )
 	{
 		FreePSAPIRoutines();
@@ -126,9 +92,7 @@ bool	FindProc( char *szProcess )
 		return false;
 	}
 
-	//
 	// walk trough and compare see if the process is running
-	//
 	for( int k( dPIDSize / sizeof( DWORD ) ); k >= 0; k-- )
 	{
 		memset( szCurrentProcessName, 0, 1024*sizeof(char) );
@@ -153,19 +117,12 @@ bool	FindProc( char *szProcess )
 		}
 	}
 	
-	//
 	// free PSAPI routines
-	//
 	FreePSAPIRoutines();
 
 	return false;
 }
 
-
-
-
-
-//-------------------------------------------------------------------------------------------
 // kills a process by name
 // return value:	true	- process was found
 //					false	- process not found
@@ -179,23 +136,15 @@ bool	KillProc( char *szProcess )
 	HANDLE		hProcess;
 	HMODULE		phModule[ 1024 ];
 
-  
-	//
 	// make the name lower case
-	//
 	memset( szProcessName, 0, 1024*sizeof(char) );
 	sprintf( szProcessName, "%s", szProcess );
 	strlwr( szProcessName );
 
-	//
-    // load PSAPI routines
-	//
 	if( false == LoadPSAPIRoutines() )
 		return false;
 
-	//
 	// enumerate processes names
-	//
     if( FALSE == EnumProcesses( dPID, dSize, &dPIDSize ) )
 	{
 		FreePSAPIRoutines();
@@ -203,9 +152,7 @@ bool	KillProc( char *szProcess )
 		return false;
 	}
 
-	//
 	// walk trough and compare see if the process is running
-	//
 	for( int k( dPIDSize / sizeof( DWORD ) ); k >= 0; k-- )
 	{
 		memset( szCurrentProcessName, 0, 1024*sizeof(char) );
@@ -221,9 +168,6 @@ bool	KillProc( char *szProcess )
 					{
 						FreePSAPIRoutines();
 
-						//
-						// kill process
-						//
 						if( false == TerminateProcess( hProcess, 0 ) )
 						{
 							CloseHandle( hProcess );
@@ -231,16 +175,9 @@ bool	KillProc( char *szProcess )
 							return true;
 						}
 
-						//
-						// refresh systray
-						//
 						UpdateWindow( FindWindow( NULL, "Shell_TrayWnd" ) );
 
-						//
-						// refresh desktop window
-						//
 						UpdateWindow( GetDesktopWindow() );
-
 						CloseHandle( hProcess );
 
 						return true;
@@ -251,19 +188,12 @@ bool	KillProc( char *szProcess )
 		}
 	}
 	
-	//
-	// free PSAPI routines
-	//
 	FreePSAPIRoutines();
 
 	return false;
 }
 
 
-
-
-
-//-------------------------------------------------------------------------------------------
 bool	FindDev( char *szDriverName )
 {
 	char		szDeviceName[ 1024 ];
@@ -274,32 +204,20 @@ bool	FindDev( char *szDriverName )
 	TCHAR		tszCurrentDeviceName[ 1024 ];
 	DWORD		dNameSize( 1024 );
 
-  
-	//
 	// make the name lower case
-	//
 	memset( szDeviceName, 0, 1024*sizeof(char) );
 	sprintf( szDeviceName, "%s", strlwr( szDriverName ) );
 
-	//
-    // load PSAPI routines
-	//
 	if( false == LoadPSAPIRoutines() )
 		return false;
 
-	//
-	// enumerate devices
-	//
     if( FALSE == EnumDeviceDrivers( lpDevices, dSize, &dDevicesSize ) )
 	{
 		FreePSAPIRoutines();
 
 		return false;
 	}
-
-	//
 	// walk trough and compare see if the device driver exists
-	//
 	for( int k( dDevicesSize / sizeof( LPVOID ) ); k >= 0; k-- )
 	{
 		memset( szCurrentDeviceName, 0, 1024*sizeof(char) );
@@ -318,26 +236,18 @@ bool	FindDev( char *szDriverName )
 		}
 	}
 	
-	//
 	// free PSAPI routines
-	//
 	FreePSAPIRoutines();
 
 	return false;
 }
 
-
-
-
-
-//-------------------------------------------------------------------------------------------
 extern "C" __declspec(dllexport) void	FindProcess( HWND		hwndParent, 
 													 int		string_size,
 													 char		*variables, 
 													 stack_t	**stacktop )
 {
 	char		szParameter[ 1024 ];
-
 
 	g_hwndParent	= hwndParent;
 
@@ -355,17 +265,12 @@ extern "C" __declspec(dllexport) void	FindProcess( HWND		hwndParent,
 }
 
 
-
-
-
-//-------------------------------------------------------------------------------------------
 extern "C" __declspec(dllexport) void	KillProcess( HWND		hwndParent, 
 													 int		string_size,
 													 char		*variables, 
 													 stack_t	**stacktop )
 {
 	char		szParameter[ 1024 ];
-
 
 	g_hwndParent	= hwndParent;
 
@@ -382,18 +287,12 @@ extern "C" __declspec(dllexport) void	KillProcess( HWND		hwndParent,
 	}
 }
 
-
-
-
-
-//-------------------------------------------------------------------------------------------
 extern "C" __declspec(dllexport) void	FindDevice( HWND		hwndParent, 
 													 int		string_size,
 													 char		*variables, 
 													 stack_t	**stacktop )
 {
 	char		szParameter[ 1024 ];
-
 
 	g_hwndParent	= hwndParent;
 
@@ -409,3 +308,4 @@ extern "C" __declspec(dllexport) void	FindDevice( HWND		hwndParent,
 		setuservariable( INST_R0, szParameter );
 	}
 }
+

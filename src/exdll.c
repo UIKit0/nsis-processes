@@ -12,7 +12,6 @@ void __declspec(dllexport) myFunction(HWND hwndParent, int string_size,
 
   EXDLL_INIT();
 
-
   // note if you want parameters from the stack, pop them off in order.
   // i.e. if you are called via exdll::myFunction file.dat poop.dat
   // calling popstring() the first time would give you file.dat,
@@ -27,8 +26,6 @@ void __declspec(dllexport) myFunction(HWND hwndParent, int string_size,
     MessageBox(g_hwndParent,buf,0,MB_OK);
   }
 }
-
-
 
 BOOL WINAPI _DllMainCRTStartup(HANDLE hInst, ULONG ul_reason_for_call, LPVOID lpReserved)
 {
