@@ -2,9 +2,12 @@
 #include "processes.h"
 #include "string.h"
 
-bool FindProc(char *szProcess);
-bool KillProc(char *szProcess);
-bool FindDev(char *szDriverName);
+// PSAPI function pointers
+typedef BOOL	(WINAPI *lpfEnumProcesses)			( DWORD *, DWORD, DWORD * );
+typedef BOOL	(WINAPI *lpfEnumProcessModules)		( HANDLE, HMODULE *, DWORD, LPDWORD );
+typedef DWORD	(WINAPI *lpfGetModuleBaseName)		( HANDLE, HMODULE, LPTSTR, DWORD );
+typedef BOOL	(WINAPI *lpfEnumDeviceDrivers)		( LPVOID *, DWORD, LPDWORD );
+typedef BOOL	(WINAPI *lpfGetDeviceDriverBaseName)( LPVOID, LPTSTR, DWORD );
 
 // global variables
 lpfEnumProcesses            EnumProcesses;
@@ -86,37 +89,35 @@ Exit:
 
 #define PIDS_ARRAY_SIZE_MAX 1024
 // return true if process with <processName> was found, false otherwise
-bool FindProc(char *processName)
+static BOOL FindProc(char *processName)
 {
-    DWORD       pidsArray[PIDS_ARRAY_SIZE_MAX];
-    DWORD       cbPidsSize;
+    DWORD  pidsArray[PIDS_ARRAY_SIZE_MAX];
+    DWORD  cbPidsArraySize;
 
     if (!LoadPSAPIRoutines())
-        return false;
+        return FALSE;
 
-    if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsSize))
+    if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsArraySize))
         goto Error;
 
-    int processesCount = cbPidsSize / sizeof(DWORD);
+    int processesCount = cbPidsArraySize / sizeof(DWORD);
 
     for (int i = 0; i < processesCount; i++)
     {
         if (IsProcessNamed(pidsArray[i], processName)) 
         {
             FreePSAPIRoutines();
-            return true;
+            return TRUE;
         }
     }
 
 Error:
     FreePSAPIRoutines();
-    return false;
+    return FALSE;
 }
 
-// kills a process by name
-// return value:	true	- process was found
-//					false	- process not found
-bool	KillProc( char *szProcess )
+// Kills a process by name. Returns true if process was found, false otherwise.
+static bool KillProc(char *szProcess)
 {
 	char		szProcessName[ 1024 ];
 	char		szCurrentProcessName[ 1024 ];
@@ -134,7 +135,6 @@ bool	KillProc( char *szProcess )
 	if( false == LoadPSAPIRoutines() )
 		return false;
 
-	// enumerate processes names
     if( FALSE == EnumProcesses( dPID, dSize, &dPIDSize ) )
 	{
 		FreePSAPIRoutines();
@@ -184,7 +184,7 @@ bool	KillProc( char *szProcess )
 }
 
 
-bool	FindDev( char *szDriverName )
+static bool FindDev(char *szDriverName)
 {
 	char		szDeviceName[ 1024 ];
 	char		szCurrentDeviceName[ 1024 ];
@@ -231,70 +231,50 @@ bool	FindDev( char *szDriverName )
 	return false;
 }
 
-extern "C" __declspec(dllexport) void	FindProcess( HWND		hwndParent, 
-													 int		string_size,
-													 char		*variables, 
-													 stack_t	**stacktop )
+static void SetParamFromBool(char *param, BOOL val)
 {
-	char		szParameter[ 1024 ];
-
-	g_hwndParent	= hwndParent;
-
-	EXDLL_INIT();
-	{
-		popstring( szParameter );
-
-		if( true == FindProc( szParameter ) )
-			wsprintf( szParameter, "1" );
-		else
-			wsprintf( szParameter, "0" );
-
-		setuservariable( INST_R0, szParameter );
-	}
+    if (val)
+        param[0] = '1';
+    else
+        param[0] = '0';
+    param[1] = 0;
 }
 
-
-extern "C" __declspec(dllexport) void	KillProcess( HWND		hwndParent, 
-													 int		string_size,
-													 char		*variables, 
-													 stack_t	**stacktop )
+extern "C" __declspec(dllexport)
+void FindProcess(HWND hwndParent, int string_size, char *variables, stack_t **stacktop)
 {
-	char		szParameter[ 1024 ];
+    char            szParameter[ 1024 ];
+    g_hwndParent    = hwndParent;
 
-	g_hwndParent	= hwndParent;
-
-	EXDLL_INIT();
-	{
-		popstring( szParameter );
-
-		if( true == KillProc( szParameter ) )
-			wsprintf( szParameter, "1" );
-		else
-			wsprintf( szParameter, "0" );
-
-		setuservariable( INST_R0, szParameter );
-	}
+    EXDLL_INIT();
+    popstring(szParameter);
+    BOOL ok = FindProc(szParameter);
+    SetParamFromBool(szParameter, ok);
+    setuservariable(INST_R0, szParameter);
 }
 
-extern "C" __declspec(dllexport) void	FindDevice( HWND		hwndParent, 
-													 int		string_size,
-													 char		*variables, 
-													 stack_t	**stacktop )
+extern "C" __declspec(dllexport)
+void KillProcess(HWND hwndParent, int string_size, char *variables, stack_t **stacktop)
 {
-	char		szParameter[ 1024 ];
+    char    szParameter[1024];
+    g_hwndParent = hwndParent;
 
-	g_hwndParent	= hwndParent;
+    EXDLL_INIT();
+    popstring( szParameter );
+    BOOL ok = KillProc(szParameter);
+    SetParamFromBool(szParameter, ok);
+    setuservariable( INST_R0, szParameter );
+}
 
-	EXDLL_INIT();
-	{
-		popstring( szParameter );
-
-		if( true == FindDev( szParameter ) )
-			wsprintf( szParameter, "1" );
-		else
-			wsprintf( szParameter, "0" );
-
-		setuservariable( INST_R0, szParameter );
-	}
+extern "C" __declspec(dllexport)
+void FindDevice(HWND hwndParent, int string_size, char *variables, stack_t **stacktop)
+{
+    char    szParameter[1024];
+    g_hwndParent = hwndParent;
+    EXDLL_INIT();
+    popstring(szParameter);
+    BOOL ok = FindDev(szParameter);
+    SetParamFromBool(szParameter, ok);
+    setuservariable(INST_R0, szParameter);
 }
 
