@@ -18,106 +18,99 @@ HWND            g_hwndParent;
 HINSTANCE       g_hInstLib;
 
 // main DLL entry
-BOOL WINAPI		_DllMainCRTStartup( HANDLE	hInst, 
-									ULONG	/*ul_reason_for_call*/,
-									LPVOID	/*lpReserved*/ )
+BOOL WINAPI _DllMainCRTStartup(HANDLE hInst, ULONG /*ul_reason_for_call*/, LPVOID	/*lpReserved*/ )
 {
-    g_hInstance		= (struct HINSTANCE__ *)hInst;
-
+    g_hInstance = (struct HINSTANCE__ *)hInst;
     return TRUE;
 }
 
 // loads the psapi routines
 static bool LoadPSAPIRoutines(void)
 {
-  g_hInstLib = LoadLibraryA("PSAPI.DLL");
-  if (NULL == g_hInstLib)
-    return false;
+    g_hInstLib = LoadLibraryA("PSAPI.DLL");
+    if (NULL == g_hInstLib)
+        return false;
 
-  EnumProcesses           = (lpfEnumProcesses) GetProcAddress(g_hInstLib, "EnumProcesses");
-  EnumProcessModules      = (lpfEnumProcessModules) GetProcAddress(g_hInstLib, "EnumProcessModules");
-  GetModuleBaseName       = (lpfGetModuleBaseName) GetProcAddress(g_hInstLib, "GetModuleBaseNameA");
-  EnumDeviceDrivers       = (lpfEnumDeviceDrivers) GetProcAddress(g_hInstLib, "EnumDeviceDrivers");
-  GetDeviceDriverBaseName = (lpfGetDeviceDriverBaseName) GetProcAddress(g_hInstLib, "GetDeviceDriverBaseNameA");
+    EnumProcesses           = (lpfEnumProcesses) GetProcAddress(g_hInstLib, "EnumProcesses");
+    EnumProcessModules      = (lpfEnumProcessModules) GetProcAddress(g_hInstLib, "EnumProcessModules");
+    GetModuleBaseName       = (lpfGetModuleBaseName) GetProcAddress(g_hInstLib, "GetModuleBaseNameA");
+    EnumDeviceDrivers       = (lpfEnumDeviceDrivers) GetProcAddress(g_hInstLib, "EnumDeviceDrivers");
+    GetDeviceDriverBaseName = (lpfGetDeviceDriverBaseName) GetProcAddress(g_hInstLib, "GetDeviceDriverBaseNameA");
 
-  if (!EnumProcesses || !EnumProcessModules || !EnumDeviceDrivers ||
+    if (!EnumProcesses || !EnumProcessModules || !EnumDeviceDrivers ||
       !GetModuleBaseName || !GetDeviceDriverBaseName )
-  {
-    FreeLibrary(g_hInstLib);
-    return false;
-  }
+    {
+        FreeLibrary(g_hInstLib);
+        return false;
+    }
 
-  return true;
+    return true;
 }
 
 static void FreePSAPIRoutines(void)
 {
-  EnumProcesses = NULL;
-  EnumProcessModules = NULL;
-  GetModuleBaseName = NULL;
-  EnumDeviceDrivers = NULL;
+    EnumProcesses = NULL;
+    EnumProcessModules = NULL;
+    GetModuleBaseName = NULL;
+    EnumDeviceDrivers = NULL;
 
-  FreeLibrary(g_hInstLib);
+    FreeLibrary(g_hInstLib);
 }
 
-// find a process by name
-// return value:	true	- process was found
-//					false	- process not found
-bool	FindProc( char *szProcess )
+BOOL IsProcessNamed(DWORD processId, char *processName)
 {
-	char		szProcessName[1024];
-	char		szCurrentProcessName[1024];
-	DWORD		dPID[1024];
-	DWORD		dPIDSize = 1024;
-	DWORD		dSize = 1024;
-	HANDLE		hProcess;
-	HMODULE		phModule[1024];
+    HANDLE      hProcess = NULL;
+    char        currentProcessName[1024];
+    HMODULE     modulesArray[1024];
+    DWORD       modulesCount;
+    BOOL        nameMatches = FALSE;
 
-	// make the name lower case
-	memset( szProcessName, 0, 1024*sizeof(char) );
-	sprintf( szProcessName, "%s", szProcess );
-	strlwr( szProcessName );
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, processId);
+    if (!hProcess)
+        return FALSE;
 
-    // load PSAPI routines
-	if( false == LoadPSAPIRoutines() )
-		return false;
+    BOOL ok = EnumProcessModules(hProcess, modulesArray, sizeof(HMODULE)*1024, &modulesCount);
+    if (!ok)
+        goto Exit;
 
-	// enumerate processes names
-    if( FALSE == EnumProcesses( dPID, dSize, &dPIDSize ) )
-	{
-		FreePSAPIRoutines();
+    if (0 == GetModuleBaseName(hProcess, modulesArray[0], currentProcessName, 1024))
+        goto Exit;
 
-		return false;
-	}
+    if (0 == _stricmp(currentProcessName, processName))
+        nameMatches = TRUE;
 
-	// walk trough and compare see if the process is running
-	for( int k( dPIDSize / sizeof( DWORD ) ); k >= 0; k-- )
-	{
-		memset( szCurrentProcessName, 0, 1024*sizeof(char) );
+Exit:
+    CloseHandle(hProcess);
+    return nameMatches;
+}
 
-		if( NULL != ( hProcess = OpenProcess( PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, dPID[ k ] ) ) )
-		{
-			if( TRUE == EnumProcessModules( hProcess, phModule, sizeof(HMODULE)*1024, &dPIDSize ) )
-				if( GetModuleBaseName( hProcess, phModule[ 0 ], szCurrentProcessName, 1024 ) > 0 )
-				{
-					strlwr( szCurrentProcessName );
+#define PIDS_ARRAY_SIZE_MAX 1024
+// return true if process with <processName> was found, false otherwise
+bool FindProc(char *processName)
+{
+    DWORD       pidsArray[PIDS_ARRAY_SIZE_MAX];
+    DWORD       cbPidsSize;
 
-					if( NULL != strstr( szCurrentProcessName, szProcessName ) )
-					{
-						FreePSAPIRoutines();
-						CloseHandle( hProcess );
+    if (!LoadPSAPIRoutines())
+        return false;
 
-						return true;
-					}
-				}
+    if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsSize))
+        goto Error;
 
-			CloseHandle( hProcess );
-		}
-	}
+    int processesCount = cbPidsSize / sizeof(DWORD);
 
-	FreePSAPIRoutines();
+    for (int i = 0; i < processesCount; i++)
+    {
+        if (IsProcessNamed(pidsArray[i], processName)) 
+        {
+            FreePSAPIRoutines();
+            return true;
+        }
+    }
 
-	return false;
+Error:
+    FreePSAPIRoutines();
+    return false;
 }
 
 // kills a process by name
