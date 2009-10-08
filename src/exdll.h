@@ -54,7 +54,7 @@ enum
 };
 
 // utility functions (not required but often useful)
-static int popstring( char *str )
+static inline int popstring( char *str )
 {
   stack_t	*th;
 
@@ -69,7 +69,7 @@ static int popstring( char *str )
   return 0;
 }
 
-static void pushstring( char *str )
+static inline void pushstring( char *str )
 {
   stack_t	*th;
 
@@ -82,7 +82,7 @@ static void pushstring( char *str )
   *g_stacktop	= th;
 }
 
-static char *getuservariable( int varnum )
+static inline char *getuservariable( int varnum )
 {
   if ( varnum < 0 || varnum >= __INST_LAST )
     return NULL;
@@ -90,7 +90,7 @@ static char *getuservariable( int varnum )
   return (g_variables + varnum*g_stringsize);
 }
 
-static void setuservariable( int varnum, char *var )
+static inline void setuservariable( int varnum, char *var )
 {
   if ( var != NULL && varnum >= 0 && varnum < __INST_LAST )
     lstrcpy( g_variables + varnum*g_stringsize, var );
