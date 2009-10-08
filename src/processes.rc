@@ -72,12 +72,12 @@ BEGIN
             VALUE "Comments", "NSIS Plug-in for Windows process management. Only WinNT, Win2K, WinXP and Win2003 Server supported."
             VALUE "CompanyName", "Andrei Ciubotaru [Hardwired]"
             VALUE "FileDescription", "Windows Processes Management"
-            VALUE "FileVersion", "1, 0, 0, 1"
+            VALUE "FileVersion", "1, 0, 0, 2"
             VALUE "InternalName", "Processes"
             VALUE "LegalCopyright", "Copyright (c) 2004 Hardwired. No rights reserved."
             VALUE "OriginalFilename", "Processes.dll"
             VALUE "ProductName", "Processes"
-            VALUE "ProductVersion", "1, 0, 0, 1"
+            VALUE "ProductVersion", "1, 0, 0, 2"
         END
     END
     BLOCK "VarFileInfo"
