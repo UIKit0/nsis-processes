@@ -16,14 +16,14 @@ lpfGetModuleBaseName        GetModuleBaseNameA;
 lpfEnumDeviceDrivers        EnumDeviceDrivers;
 lpfGetDeviceDriverBaseName  GetDeviceDriverBaseNameA;
 
-HINSTANCE       g_hInstance;
-HWND            g_hwndParent;
-HINSTANCE       g_hInstLib;
+static HINSTANCE       g_hInstance;
+static HWND            g_hwndParent;
+static HINSTANCE       g_hInstLib;
 
 // main DLL entry
-BOOL WINAPI _DllMainCRTStartup(HANDLE hInst, ULONG /*ul_reason_for_call*/, LPVOID	/*lpReserved*/ )
+BOOL WINAPI _DllMainCRTStartup(HANDLE hInst, ULONG /*ul_reason_for_call*/, LPVOID	/*lpReserved*/)
 {
-    g_hInstance = (struct HINSTANCE__ *)hInst;
+    g_hInstance = (HINSTANCE)hInst;
     return TRUE;
 }
 
@@ -120,6 +120,41 @@ static BOOL FindProc(char *processName)
 }
 
 // return TRUE if found and killed a process
+BOOL KillProcessNamedAndWait(DWORD processId, char *processName)
+{
+    HANDLE      hProcess = NULL;
+    char        currentProcessName[1024];
+    HMODULE     modulesArray[1024];
+    DWORD       modulesCount;
+    BOOL        killed = FALSE;
+
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, processId);
+    if (!hProcess)
+        return FALSE;
+
+    BOOL ok = EnumProcessModules(hProcess, modulesArray, sizeof(HMODULE)*1024, &modulesCount);
+    if (!ok)
+        goto Exit;
+
+    if (0 == GetModuleBaseNameA(hProcess, modulesArray[0], currentProcessName, 1024))
+        goto Exit;
+
+    if (0 != _stricmp(currentProcessName, processName))
+        goto Exit;
+
+    killed = TerminateProcess(hProcess, 0);
+    if (!killed)
+        goto Exit;
+
+    UpdateWindow(FindWindow(NULL, "Shell_TrayWnd"));    
+    UpdateWindow(GetDesktopWindow());
+
+Exit:
+    CloseHandle(hProcess);
+    return killed;
+}
+
+// return TRUE if found and killed a process
 BOOL KillProcessNamed(DWORD processId, char *processName)
 {
     HANDLE      hProcess = NULL;
@@ -146,7 +181,7 @@ BOOL KillProcessNamed(DWORD processId, char *processName)
     if (!killed)
         goto Exit;
 
-    UpdateWindow(FindWindow( NULL, "Shell_TrayWnd"));    
+    UpdateWindow(FindWindow(NULL, "Shell_TrayWnd"));    
     UpdateWindow(GetDesktopWindow());
 
 Exit:
@@ -172,6 +207,30 @@ static BOOL KillProc(char *processName)
     for (int i = 0; i < processesCount; i++)
     {
         if (KillProcessNamed(pidsArray[i], processName)) 
+            killedCount++;
+    }
+
+    return killedCount > 0;
+}
+
+static BOOL KillProcAndWait(char *processName)
+{
+    DWORD  pidsArray[PIDS_ARRAY_SIZE_MAX];
+    DWORD  cbPidsArraySize;
+    int    killedCount = 0;
+
+    AutoSapiRoutines sapi;
+    if (!sapi.ok())
+        return FALSE;
+
+    if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsArraySize))
+        return FALSE;
+
+    int processesCount = cbPidsArraySize / sizeof(DWORD);
+
+    for (int i = 0; i < processesCount; i++)
+    {
+        if (KillProcessNamedAndWait(pidsArray[i], processName)) 
             killedCount++;
     }
 
@@ -233,10 +292,23 @@ void KillProcess(HWND hwndParent, int string_size, char *variables, stack_t **st
     g_hwndParent = hwndParent;
 
     EXDLL_INIT();
-    popstring( szParameter );
+    popstring(szParameter);
     BOOL ok = KillProc(szParameter);
     SetParamFromBool(szParameter, ok);
-    setuservariable( INST_R0, szParameter );
+    setuservariable(INST_R0, szParameter);
+}
+
+extern "C" __declspec(dllexport)
+void KillProcessAndWait(HWND hwndParent, int string_size, char *variables, stack_t **stacktop)
+{
+    char    szParameter[1024];
+    g_hwndParent = hwndParent;
+
+    EXDLL_INIT();
+    popstring(szParameter);
+    BOOL ok = KillProcAndWait(szParameter);
+    SetParamFromBool(szParameter, ok);
+    setuservariable(INST_R0, szParameter);
 }
 
 extern "C" __declspec(dllexport)
