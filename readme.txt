@@ -80,6 +80,8 @@ Releases:
            Lead Developer ICode&Ideas SRL (http://www.icode.ro)
            hardwiredteks@gmail.com, hardwired@icode.ro
 
+This code is based on Processes-x64fix.zip latest from http://nsis.sourceforge.net/Processes_plug-in
+
 -------- Original notes from Andrei Ciubotaru ----------------
 
 License:

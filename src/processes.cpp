@@ -3,11 +3,11 @@
 #include "string.h"
 
 // PSAPI function pointers
-typedef BOOL	(WINAPI *lpfEnumProcesses)			( DWORD *, DWORD, DWORD * );
-typedef BOOL	(WINAPI *lpfEnumProcessModules)		( HANDLE, HMODULE *, DWORD, LPDWORD );
-typedef DWORD	(WINAPI *lpfGetModuleBaseName)		( HANDLE, HMODULE, LPTSTR, DWORD );
-typedef BOOL	(WINAPI *lpfEnumDeviceDrivers)		( LPVOID *, DWORD, LPDWORD );
-typedef BOOL	(WINAPI *lpfGetDeviceDriverBaseName)( LPVOID, LPTSTR, DWORD );
+typedef BOOL	(WINAPI *lpfEnumProcesses)          (DWORD *, DWORD, DWORD *);
+typedef BOOL	(WINAPI *lpfEnumProcessModules)     (HANDLE, HMODULE *, DWORD, LPDWORD);
+typedef DWORD	(WINAPI *lpfGetModuleBaseName)      (HANDLE, HMODULE, LPTSTR, DWORD);
+typedef BOOL	(WINAPI *lpfEnumDeviceDrivers)      (LPVOID *, DWORD, LPDWORD);
+typedef BOOL	(WINAPI *lpfGetDeviceDriverBaseName)(LPVOID, LPTSTR, DWORD);
 
 // global variables
 lpfEnumProcesses            EnumProcesses;
@@ -27,30 +27,7 @@ BOOL WINAPI _DllMainCRTStartup(HANDLE hInst, ULONG /*ul_reason_for_call*/, LPVOI
     return TRUE;
 }
 
-// loads the psapi routines
-static bool LoadPSAPIRoutines(void)
-{
-    g_hInstLib = LoadLibraryA("PSAPI.DLL");
-    if (NULL == g_hInstLib)
-        return false;
-
-    EnumProcesses            = (lpfEnumProcesses) GetProcAddress(g_hInstLib, "EnumProcesses");
-    EnumProcessModules       = (lpfEnumProcessModules) GetProcAddress(g_hInstLib, "EnumProcessModules");
-    GetModuleBaseNameA       = (lpfGetModuleBaseName) GetProcAddress(g_hInstLib, "GetModuleBaseNameA");
-    EnumDeviceDrivers        = (lpfEnumDeviceDrivers) GetProcAddress(g_hInstLib, "EnumDeviceDrivers");
-    GetDeviceDriverBaseNameA = (lpfGetDeviceDriverBaseName) GetProcAddress(g_hInstLib, "GetDeviceDriverBaseNameA");
-
-    if (!EnumProcesses || !EnumProcessModules || !EnumDeviceDrivers ||
-      !GetModuleBaseNameA || !GetDeviceDriverBaseNameA )
-    {
-        FreeLibrary(g_hInstLib);
-        return false;
-    }
-
-    return true;
-}
-
-static void FreePSAPIRoutines(void)
+static void FreePSAPIRoutines()
 {
     EnumProcesses = NULL;
     EnumProcessModules = NULL;
@@ -58,8 +35,39 @@ static void FreePSAPIRoutines(void)
     EnumDeviceDrivers = NULL;
     GetDeviceDriverBaseNameA = NULL;
 
-    FreeLibrary(g_hInstLib);
+    if (g_hInstLib) 
+    {
+        FreeLibrary(g_hInstLib);
+        g_hInstLib = NULL;
+    }
 }
+
+static BOOL HasSAPIRoutines()
+{
+    return g_hInstLib && EnumProcesses && EnumProcessModules && 
+        EnumDeviceDrivers && GetModuleBaseNameA && GetDeviceDriverBaseNameA;
+}
+
+// loads the psapi routines
+static void LoadPSAPIRoutines()
+{
+    g_hInstLib = LoadLibraryA("PSAPI.DLL");
+    if (!g_hInstLib)
+        return;
+
+    EnumProcesses            = (lpfEnumProcesses)GetProcAddress(g_hInstLib, "EnumProcesses");
+    EnumProcessModules       = (lpfEnumProcessModules)GetProcAddress(g_hInstLib, "EnumProcessModules");
+    GetModuleBaseNameA       = (lpfGetModuleBaseName)GetProcAddress(g_hInstLib, "GetModuleBaseNameA");
+    EnumDeviceDrivers        = (lpfEnumDeviceDrivers)GetProcAddress(g_hInstLib, "EnumDeviceDrivers");
+    GetDeviceDriverBaseNameA = (lpfGetDeviceDriverBaseName)GetProcAddress(g_hInstLib, "GetDeviceDriverBaseNameA");
+}
+
+class AutoSapiRoutines {
+public:
+    AutoSapiRoutines() { LoadPSAPIRoutines(); }
+    ~AutoSapiRoutines() { FreePSAPIRoutines(); }
+    BOOL ok() { return HasSAPIRoutines(); }
+};
 
 BOOL IsProcessNamed(DWORD processId, char *processName)
 {
@@ -95,25 +103,19 @@ static BOOL FindProc(char *processName)
     DWORD  pidsArray[PIDS_ARRAY_SIZE_MAX];
     DWORD  cbPidsArraySize;
 
-    if (!LoadPSAPIRoutines())
+    AutoSapiRoutines sapi;
+    if (!sapi.ok())
         return FALSE;
 
     if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsArraySize))
-        goto Error;
+        return FALSE;
 
     int processesCount = cbPidsArraySize / sizeof(DWORD);
-
     for (int i = 0; i < processesCount; i++)
     {
         if (IsProcessNamed(pidsArray[i], processName)) 
-        {
-            FreePSAPIRoutines();
             return TRUE;
-        }
     }
-
-Error:
-    FreePSAPIRoutines();
     return FALSE;
 }
 
@@ -158,11 +160,12 @@ static BOOL KillProc(char *processName)
     DWORD  cbPidsArraySize;
     int    killedCount = 0;
 
-    if (!LoadPSAPIRoutines())
+    AutoSapiRoutines sapi;
+    if (!sapi.ok())
         return FALSE;
 
     if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsArraySize))
-        goto Error;
+        return FALSE;
 
     int processesCount = cbPidsArraySize / sizeof(DWORD);
 
@@ -172,12 +175,7 @@ static BOOL KillProc(char *processName)
             killedCount++;
     }
 
-    FreePSAPIRoutines();
     return killedCount > 0;
-
-Error:
-    FreePSAPIRoutines();
-    return FALSE;
 }
 
 static BOOL FindDev(char *deviceName)
@@ -186,11 +184,12 @@ static BOOL FindDev(char *deviceName)
     LPVOID      devicesArray[1024];
     DWORD       cbDevicesArraySize;
 
-    if (!LoadPSAPIRoutines() )
+    AutoSapiRoutines sapi;
+    if (!sapi.ok())
         return FALSE;
 
     if (!EnumDeviceDrivers(devicesArray, 1024, &cbDevicesArraySize))
-        goto Exit;
+        return FALSE;
 
     int devicesCount = cbDevicesArraySize / sizeof(LPVOID);
     for (int i=0; i < devicesCount; i++)
@@ -199,14 +198,9 @@ static BOOL FindDev(char *deviceName)
             continue;
         
         if (0 == _stricmp(currentDeviceName, deviceName))
-        {
-            FreePSAPIRoutines();
             return TRUE;
-        }
     }
 
-Exit:
-    FreePSAPIRoutines();
     return FALSE;
 }
 
