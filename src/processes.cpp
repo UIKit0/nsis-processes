@@ -121,7 +121,9 @@ static BOOL FindProc(char *processName)
 
 #define TEN_SECONDS_IN_MS 10*1000
 
-// return TRUE if found and killed a process
+// Kill a process with given <processId> if it's named <processName>.
+// If <waitUntilTerminated> is TRUE, will wait until process is fully killed.
+// Returns TRUE if killed a process
 BOOL KillProcessNamed(DWORD processId, char *processName, BOOL waitUntilTerminated)
 {
     HANDLE      hProcess = NULL;
