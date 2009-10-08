@@ -2,21 +2,25 @@
 #include "processes.h"
 #include "string.h"
 
-// global variables
-lpfEnumProcesses			EnumProcesses;
-lpfEnumProcessModules		EnumProcessModules;
-lpfGetModuleBaseName		GetModuleBaseName;
-lpfEnumDeviceDrivers		EnumDeviceDrivers;
-lpfGetDeviceDriverBaseName	GetDeviceDriverBaseName;
+bool FindProc(char *szProcess);
+bool KillProc(char *szProcess);
+bool FindDev(char *szDriverName);
 
-HINSTANCE					g_hInstance;
-HWND						g_hwndParent;
-HINSTANCE					g_hInstLib;
+// global variables
+lpfEnumProcesses            EnumProcesses;
+lpfEnumProcessModules       EnumProcessModules;
+lpfGetModuleBaseName        GetModuleBaseName;
+lpfEnumDeviceDrivers        EnumDeviceDrivers;
+lpfGetDeviceDriverBaseName  GetDeviceDriverBaseName;
+
+HINSTANCE       g_hInstance;
+HWND            g_hwndParent;
+HINSTANCE       g_hInstLib;
 
 // main DLL entry
 BOOL WINAPI		_DllMainCRTStartup( HANDLE	hInst, 
-									ULONG	ul_reason_for_call,
-									LPVOID	lpReserved )
+									ULONG	/*ul_reason_for_call*/,
+									LPVOID	/*lpReserved*/ )
 {
     g_hInstance		= (struct HINSTANCE__ *)hInst;
 
@@ -24,42 +28,36 @@ BOOL WINAPI		_DllMainCRTStartup( HANDLE	hInst,
 }
 
 // loads the psapi routines
-bool	LoadPSAPIRoutines( void )
+static bool LoadPSAPIRoutines(void)
 {
-	if( NULL == (g_hInstLib = LoadLibraryA( "PSAPI.DLL" )) )
-		return false;
+  g_hInstLib = LoadLibraryA("PSAPI.DLL");
+  if (NULL == g_hInstLib)
+    return false;
 
-	EnumProcesses			= (lpfEnumProcesses)			GetProcAddress( g_hInstLib, "EnumProcesses" );
-	EnumProcessModules		= (lpfEnumProcessModules)		GetProcAddress( g_hInstLib, "EnumProcessModules" );
-	GetModuleBaseName		= (lpfGetModuleBaseName)		GetProcAddress( g_hInstLib, "GetModuleBaseNameA" );
-	EnumDeviceDrivers		= (lpfEnumDeviceDrivers)		GetProcAddress( g_hInstLib, "EnumDeviceDrivers" );
-	GetDeviceDriverBaseName	= (lpfGetDeviceDriverBaseName)	GetProcAddress( g_hInstLib, "GetDeviceDriverBaseNameA" );
+  EnumProcesses           = (lpfEnumProcesses) GetProcAddress(g_hInstLib, "EnumProcesses");
+  EnumProcessModules      = (lpfEnumProcessModules) GetProcAddress(g_hInstLib, "EnumProcessModules");
+  GetModuleBaseName       = (lpfGetModuleBaseName) GetProcAddress(g_hInstLib, "GetModuleBaseNameA");
+  EnumDeviceDrivers       = (lpfEnumDeviceDrivers) GetProcAddress(g_hInstLib, "EnumDeviceDrivers");
+  GetDeviceDriverBaseName = (lpfGetDeviceDriverBaseName) GetProcAddress(g_hInstLib, "GetDeviceDriverBaseNameA");
 
-	if( ( NULL == EnumProcesses ) ||
-		( NULL == EnumProcessModules ) ||
-		( NULL == EnumDeviceDrivers ) ||
-		( NULL == GetModuleBaseName ) ||
-		( NULL == GetDeviceDriverBaseName ) )
-	{
-		FreeLibrary( g_hInstLib );
-		return false;
-	}
+  if (!EnumProcesses || !EnumProcessModules || !EnumDeviceDrivers ||
+      !GetModuleBaseName || !GetDeviceDriverBaseName )
+  {
+    FreeLibrary(g_hInstLib);
+    return false;
+  }
 
-	return true;
+  return true;
 }
 
-// free the psapi routines
-bool	FreePSAPIRoutines( void )
+static void FreePSAPIRoutines(void)
 {
-	EnumProcesses		= NULL;
-	EnumProcessModules	= NULL;
-	GetModuleBaseName	= NULL;
-	EnumDeviceDrivers	= NULL;
+  EnumProcesses = NULL;
+  EnumProcessModules = NULL;
+  GetModuleBaseName = NULL;
+  EnumDeviceDrivers = NULL;
 
-	if( FALSE == FreeLibrary( g_hInstLib ) )
-		return false;
-
-	return true;
+  FreeLibrary(g_hInstLib);
 }
 
 // find a process by name
@@ -67,13 +65,13 @@ bool	FreePSAPIRoutines( void )
 //					false	- process not found
 bool	FindProc( char *szProcess )
 {
-	char		szProcessName[ 1024 ];
-	char		szCurrentProcessName[ 1024 ];
-	DWORD		dPID[ 1024 ];
-	DWORD		dPIDSize( 1024 );
-	DWORD		dSize( 1024 );
+	char		szProcessName[1024];
+	char		szCurrentProcessName[1024];
+	DWORD		dPID[1024];
+	DWORD		dPIDSize = 1024;
+	DWORD		dSize = 1024;
 	HANDLE		hProcess;
-	HMODULE		phModule[ 1024 ];
+	HMODULE		phModule[1024];
 
 	// make the name lower case
 	memset( szProcessName, 0, 1024*sizeof(char) );
@@ -116,8 +114,7 @@ bool	FindProc( char *szProcess )
 			CloseHandle( hProcess );
 		}
 	}
-	
-	// free PSAPI routines
+
 	FreePSAPIRoutines();
 
 	return false;
@@ -235,8 +232,7 @@ bool	FindDev( char *szDriverName )
 			}
 		}
 	}
-	
-	// free PSAPI routines
+
 	FreePSAPIRoutines();
 
 	return false;

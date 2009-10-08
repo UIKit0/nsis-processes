@@ -7,15 +7,6 @@ typedef DWORD	(WINAPI *lpfGetModuleBaseName)		( HANDLE, HMODULE, LPTSTR, DWORD )
 typedef BOOL	(WINAPI *lpfEnumDeviceDrivers)		( LPVOID *, DWORD, LPDWORD );
 typedef BOOL	(WINAPI *lpfGetDeviceDriverBaseName)( LPVOID, LPTSTR, DWORD );
 
-// Internal use routines
-bool	LoadPSAPIRoutines( void );
-bool	FreePSAPIRoutines( void );
-
-bool	FindProc( char *szProcess );
-bool	KillProc( char *szProcess );
-
-bool	FindDev( char *szDriverName );
-
 // Exported routines
 extern "C" __declspec(dllexport) void	FindProcess( HWND		hwndParent, 
 													 int		string_size,
