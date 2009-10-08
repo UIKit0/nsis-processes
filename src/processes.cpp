@@ -119,8 +119,10 @@ static BOOL FindProc(char *processName)
     return FALSE;
 }
 
+#define TEN_SECONDS_IN_MS 10*1000
+
 // return TRUE if found and killed a process
-BOOL KillProcessNamedAndWait(DWORD processId, char *processName)
+BOOL KillProcessNamed(DWORD processId, char *processName, BOOL waitUntilTerminated)
 {
     HANDLE      hProcess = NULL;
     char        currentProcessName[1024];
@@ -146,40 +148,8 @@ BOOL KillProcessNamedAndWait(DWORD processId, char *processName)
     if (!killed)
         goto Exit;
 
-    UpdateWindow(FindWindow(NULL, "Shell_TrayWnd"));    
-    UpdateWindow(GetDesktopWindow());
-
-Exit:
-    CloseHandle(hProcess);
-    return killed;
-}
-
-// return TRUE if found and killed a process
-BOOL KillProcessNamed(DWORD processId, char *processName)
-{
-    HANDLE      hProcess = NULL;
-    char        currentProcessName[1024];
-    HMODULE     modulesArray[1024];
-    DWORD       modulesCount;
-    BOOL        killed = FALSE;
-
-    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, processId);
-    if (!hProcess)
-        return FALSE;
-
-    BOOL ok = EnumProcessModules(hProcess, modulesArray, sizeof(HMODULE)*1024, &modulesCount);
-    if (!ok)
-        goto Exit;
-
-    if (0 == GetModuleBaseNameA(hProcess, modulesArray[0], currentProcessName, 1024))
-        goto Exit;
-
-    if (0 != _stricmp(currentProcessName, processName))
-        goto Exit;
-
-    killed = TerminateProcess(hProcess, 0);
-    if (!killed)
-        goto Exit;
+    if (waitUntilTerminated)
+        WaitForSingleObject(hProcess, TEN_SECONDS_IN_MS);
 
     UpdateWindow(FindWindow(NULL, "Shell_TrayWnd"));    
     UpdateWindow(GetDesktopWindow());
@@ -189,7 +159,7 @@ Exit:
     return killed;
 }
 
-static BOOL KillProc(char *processName)
+static BOOL KillProc(char *processName, BOOL waitUntilTerminated)
 {
     DWORD  pidsArray[PIDS_ARRAY_SIZE_MAX];
     DWORD  cbPidsArraySize;
@@ -206,31 +176,7 @@ static BOOL KillProc(char *processName)
 
     for (int i = 0; i < processesCount; i++)
     {
-        if (KillProcessNamed(pidsArray[i], processName)) 
-            killedCount++;
-    }
-
-    return killedCount > 0;
-}
-
-static BOOL KillProcAndWait(char *processName)
-{
-    DWORD  pidsArray[PIDS_ARRAY_SIZE_MAX];
-    DWORD  cbPidsArraySize;
-    int    killedCount = 0;
-
-    AutoSapiRoutines sapi;
-    if (!sapi.ok())
-        return FALSE;
-
-    if (!EnumProcesses(pidsArray, PIDS_ARRAY_SIZE_MAX, &cbPidsArraySize))
-        return FALSE;
-
-    int processesCount = cbPidsArraySize / sizeof(DWORD);
-
-    for (int i = 0; i < processesCount; i++)
-    {
-        if (KillProcessNamedAndWait(pidsArray[i], processName)) 
+        if (KillProcessNamed(pidsArray[i], processName, waitUntilTerminated)) 
             killedCount++;
     }
 
@@ -293,7 +239,7 @@ void KillProcess(HWND hwndParent, int string_size, char *variables, stack_t **st
 
     EXDLL_INIT();
     popstring(szParameter);
-    BOOL ok = KillProc(szParameter);
+    BOOL ok = KillProc(szParameter, FALSE);
     SetParamFromBool(szParameter, ok);
     setuservariable(INST_R0, szParameter);
 }
@@ -306,7 +252,7 @@ void KillProcessAndWait(HWND hwndParent, int string_size, char *variables, stack
 
     EXDLL_INIT();
     popstring(szParameter);
-    BOOL ok = KillProcAndWait(szParameter);
+    BOOL ok = KillProc(szParameter, TRUE);
     SetParamFromBool(szParameter, ok);
     setuservariable(INST_R0, szParameter);
 }
