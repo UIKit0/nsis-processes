@@ -178,7 +178,7 @@
 				SuppressStartupBanner="true"
 				IgnoreAllDefaultLibraries="false"
 				ProgramDatabaseFile="..\bin/processes.pdb"
-				OptimizeForWindows98="1"
+				OptimizeForWindows98="0"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
 				ImportLibrary="..\bin/processes.lib"
