@@ -12,9 +12,9 @@ typedef BOOL	(WINAPI *lpfGetDeviceDriverBaseName)( LPVOID, LPTSTR, DWORD );
 // global variables
 lpfEnumProcesses            EnumProcesses;
 lpfEnumProcessModules       EnumProcessModules;
-lpfGetModuleBaseName        GetModuleBaseName;
+lpfGetModuleBaseName        GetModuleBaseNameA;
 lpfEnumDeviceDrivers        EnumDeviceDrivers;
-lpfGetDeviceDriverBaseName  GetDeviceDriverBaseName;
+lpfGetDeviceDriverBaseName  GetDeviceDriverBaseNameA;
 
 HINSTANCE       g_hInstance;
 HWND            g_hwndParent;
@@ -34,14 +34,14 @@ static bool LoadPSAPIRoutines(void)
     if (NULL == g_hInstLib)
         return false;
 
-    EnumProcesses           = (lpfEnumProcesses) GetProcAddress(g_hInstLib, "EnumProcesses");
-    EnumProcessModules      = (lpfEnumProcessModules) GetProcAddress(g_hInstLib, "EnumProcessModules");
-    GetModuleBaseName       = (lpfGetModuleBaseName) GetProcAddress(g_hInstLib, "GetModuleBaseNameA");
-    EnumDeviceDrivers       = (lpfEnumDeviceDrivers) GetProcAddress(g_hInstLib, "EnumDeviceDrivers");
-    GetDeviceDriverBaseName = (lpfGetDeviceDriverBaseName) GetProcAddress(g_hInstLib, "GetDeviceDriverBaseNameA");
+    EnumProcesses            = (lpfEnumProcesses) GetProcAddress(g_hInstLib, "EnumProcesses");
+    EnumProcessModules       = (lpfEnumProcessModules) GetProcAddress(g_hInstLib, "EnumProcessModules");
+    GetModuleBaseNameA       = (lpfGetModuleBaseName) GetProcAddress(g_hInstLib, "GetModuleBaseNameA");
+    EnumDeviceDrivers        = (lpfEnumDeviceDrivers) GetProcAddress(g_hInstLib, "EnumDeviceDrivers");
+    GetDeviceDriverBaseNameA = (lpfGetDeviceDriverBaseName) GetProcAddress(g_hInstLib, "GetDeviceDriverBaseNameA");
 
     if (!EnumProcesses || !EnumProcessModules || !EnumDeviceDrivers ||
-      !GetModuleBaseName || !GetDeviceDriverBaseName )
+      !GetModuleBaseNameA || !GetDeviceDriverBaseNameA )
     {
         FreeLibrary(g_hInstLib);
         return false;
@@ -54,8 +54,9 @@ static void FreePSAPIRoutines(void)
 {
     EnumProcesses = NULL;
     EnumProcessModules = NULL;
-    GetModuleBaseName = NULL;
+    GetModuleBaseNameA = NULL;
     EnumDeviceDrivers = NULL;
+    GetDeviceDriverBaseNameA = NULL;
 
     FreeLibrary(g_hInstLib);
 }
@@ -76,7 +77,7 @@ BOOL IsProcessNamed(DWORD processId, char *processName)
     if (!ok)
         goto Exit;
 
-    if (0 == GetModuleBaseName(hProcess, modulesArray[0], currentProcessName, 1024))
+    if (0 == GetModuleBaseNameA(hProcess, modulesArray[0], currentProcessName, 1024))
         goto Exit;
 
     if (0 == _stricmp(currentProcessName, processName))
@@ -150,7 +151,7 @@ static bool KillProc(char *szProcess)
 		if( NULL != ( hProcess = OpenProcess( PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE, FALSE, dPID[ k ] ) ) )
 		{
 			if( TRUE == EnumProcessModules( hProcess, phModule, sizeof(HMODULE)*1024, &dPIDSize ) )
-				if( GetModuleBaseName( hProcess, phModule[ 0 ], szCurrentProcessName, 1024 ) > 0 )
+				if( GetModuleBaseNameA( hProcess, phModule[ 0 ], szCurrentProcessName, 1024 ) > 0 )
 				{
 					strlwr( szCurrentProcessName );
 
@@ -183,52 +184,34 @@ static bool KillProc(char *szProcess)
 	return false;
 }
 
-
-static bool FindDev(char *szDriverName)
+static BOOL FindDev(char *deviceName)
 {
-	char		szDeviceName[ 1024 ];
-	char		szCurrentDeviceName[ 1024 ];
-	LPVOID		lpDevices[ 1024 ];
-	DWORD		dDevicesSize( 1024 );
-	DWORD		dSize( 1024 );
-	TCHAR		tszCurrentDeviceName[ 1024 ];
-	DWORD		dNameSize( 1024 );
+    char        currentDeviceName[1024];
+    LPVOID      devicesArray[1024];
+    DWORD       cbDevicesArraySize;
 
-	// make the name lower case
-	memset( szDeviceName, 0, 1024*sizeof(char) );
-	sprintf( szDeviceName, "%s", strlwr( szDriverName ) );
+    if (!LoadPSAPIRoutines() )
+        return FALSE;
 
-	if( false == LoadPSAPIRoutines() )
-		return false;
+    if (!EnumDeviceDrivers(devicesArray, 1024, &cbDevicesArraySize))
+        goto Exit;
 
-    if( FALSE == EnumDeviceDrivers( lpDevices, dSize, &dDevicesSize ) )
-	{
-		FreePSAPIRoutines();
+    int devicesCount = cbDevicesArraySize / sizeof(LPVOID);
+    for (int i=0; i < devicesCount; i++)
+    {
+        if (0 == GetDeviceDriverBaseNameA(devicesArray[i], currentDeviceName, 1024))
+            continue;
+        
+        if (0 == _stricmp(currentDeviceName, deviceName))
+        {
+            FreePSAPIRoutines();
+            return TRUE;
+        }
+    }
 
-		return false;
-	}
-	// walk trough and compare see if the device driver exists
-	for( int k( dDevicesSize / sizeof( LPVOID ) ); k >= 0; k-- )
-	{
-		memset( szCurrentDeviceName, 0, 1024*sizeof(char) );
-		memset( tszCurrentDeviceName, 0, 1024*sizeof(TCHAR) );
-
-		if( 0 != GetDeviceDriverBaseName( lpDevices[ k ], tszCurrentDeviceName, dNameSize ) )
-		{
-			sprintf( szCurrentDeviceName, "%S", tszCurrentDeviceName );
-
-			if( 0 == strcmp( strlwr( szCurrentDeviceName ), szDeviceName ) )
-			{
-				FreePSAPIRoutines();
-
-				return true;
-			}
-		}
-	}
-
-	FreePSAPIRoutines();
-
-	return false;
+Exit:
+    FreePSAPIRoutines();
+    return FALSE;
 }
 
 static void SetParamFromBool(char *param, BOOL val)
